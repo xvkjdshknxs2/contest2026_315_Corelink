@@ -1,0 +1,272 @@
+<template>
+  <stack class="page">
+    <image class="wallpaper" src="/common/wallpaper-watch.jpg" />
+    <div class="veil"></div>
+
+    <div class="overlay" onclick="enterApp">
+      <div class="top-row">
+        <text class="date-text">{{ dateText }}</text>
+        <div class="location-chip">
+          <text class="location-dot">●</text>
+          <text class="location-text">{{ locationText }}</text>
+        </div>
+      </div>
+
+      <div class="time-block">
+        <text class="time-text">{{ timeText }}</text>
+        <text class="weekday-text">{{ weekdayText }}</text>
+      </div>
+
+      <div class="brand-space"></div>
+
+      <div class="weather-card">
+        <div class="weather-main">
+          <text class="weather-label">今日天气</text>
+          <text class="weather-text">{{ weatherText }}</text>
+        </div>
+        <div class="weather-divider"></div>
+        <div class="temperature-block">
+          <text class="temperature">{{ temperatureText }}</text>
+          <text class="temperature-note">体感舒适</text>
+        </div>
+      </div>
+
+      <div class="enter-pill">
+        <text class="enter-dot"></text>
+        <text class="enter-text">轻触进入安全中心</text>
+        <text class="enter-arrow">›</text>
+      </div>
+    </div>
+  </stack>
+</template>
+
+<script>
+import router from "@system.router"
+
+const WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"]
+
+function pad(value) {
+  return value < 10 ? "0" + value : String(value)
+}
+
+export default {
+  private: {
+    timeText: "--:--",
+    dateText: "--月--日",
+    weekdayText: "--",
+    weatherText: "晴",
+    temperatureText: "24°C",
+    locationText: "校园东区"
+  },
+
+  onInit() {
+    this.clockTimer = null
+  },
+
+  onShow() {
+    const page = this
+    this.stopClock()
+    this.updateClock()
+    this.clockTimer = setInterval(function() {
+      page.updateClock()
+    }, 1000)
+  },
+
+  onHide() {
+    this.stopClock()
+  },
+
+  onDestroy() {
+    this.stopClock()
+  },
+
+  updateClock() {
+    const now = new Date()
+    this.timeText = pad(now.getHours()) + ":" + pad(now.getMinutes())
+    this.dateText = pad(now.getMonth() + 1) + "月" + pad(now.getDate()) + "日"
+    this.weekdayText = WEEKDAYS[now.getDay()]
+  },
+
+  stopClock() {
+    if (this.clockTimer) {
+      clearInterval(this.clockTimer)
+      this.clockTimer = null
+    }
+  },
+
+  enterApp() {
+    router.push({
+      uri: "/pages/swiper-container"
+    })
+  }
+}
+</script>
+
+<style>
+.page {
+  width: 100%;
+  height: 100%;
+  background-color: #031511;
+}
+
+.wallpaper {
+  width: 100%;
+  height: 100%;
+  top: -115px;
+  object-fit: cover;
+}
+
+.veil {
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 13, 10, 0.28);
+}
+
+.overlay {
+  width: 100%;
+  height: 100%;
+  padding: 27px 30px 25px 30px;
+  flex-direction: column;
+}
+
+.top-row {
+  width: 100%;
+  height: 28px;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.date-text {
+  color: #d9fff2;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.location-chip {
+  height: 27px;
+  padding-left: 9px;
+  padding-right: 10px;
+  border-radius: 14px;
+  background-color: rgba(5, 40, 32, 0.86);
+  align-items: center;
+}
+
+.location-dot {
+  color: #65efbe;
+  font-size: 8px;
+  margin-right: 5px;
+}
+
+.location-text {
+  color: #dcfff3;
+  font-size: 10px;
+}
+
+.time-block {
+  width: 100%;
+  margin-top: 8px;
+  flex-direction: column;
+}
+
+.time-text {
+  width: 100%;
+  color: #ffffff;
+  font-size: 55px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-shadow: 0 3px 10px #001a14;
+}
+
+.weekday-text {
+  color: #7ff0c5;
+  font-size: 13px;
+  font-weight: bold;
+  margin-top: -3px;
+}
+
+.brand-space {
+  width: 100%;
+  flex: 1;
+}
+
+.weather-card {
+  width: 100%;
+  height: 73px;
+  padding: 12px 15px;
+  border-radius: 22px;
+  background-color: rgba(3, 31, 25, 0.88);
+  align-items: center;
+}
+
+.weather-main {
+  flex: 1;
+  flex-direction: column;
+}
+
+.weather-label {
+  color: #76a99a;
+  font-size: 9px;
+}
+
+.weather-text {
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: bold;
+  margin-top: 1px;
+}
+
+.weather-divider {
+  width: 1px;
+  height: 39px;
+  margin-left: 13px;
+  margin-right: 14px;
+  background-color: #285247;
+}
+
+.temperature-block {
+  align-items: flex-end;
+  flex-direction: column;
+}
+
+.temperature {
+  color: #7ff1c6;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.temperature-note {
+  color: #78a99a;
+  font-size: 9px;
+}
+
+.enter-pill {
+  width: 100%;
+  height: 38px;
+  margin-top: 10px;
+  padding-left: 14px;
+  padding-right: 13px;
+  border-radius: 19px;
+  background-color: rgba(4, 27, 22, 0.9);
+  align-items: center;
+}
+
+.enter-dot {
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 4px;
+  background-color: #64e9b8;
+}
+
+.enter-text {
+  flex: 1;
+  color: #e8fff7;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.enter-arrow {
+  color: #73e7bd;
+  font-size: 23px;
+}
+</style>

@@ -1,0 +1,376 @@
+<template>
+  <scroll class="page" scroll-y="true">
+    <div class="content">
+      <text class="eyebrow">SAFETY CHECK</text>
+      <text class="title">{{ typeLabel }}</text>
+      <text class="subtitle">请确认你现在是否安全</text>
+
+      <div class="countdown-ring">
+        <text class="countdown">{{ countdown }}</text>
+        <text class="countdown-unit">秒后自动求助</text>
+      </div>
+
+      <input class="safe-button" type="button" value="我没事，取消告警" onclick="confirmSafe" />
+      <input class="help-button" type="button" value="立即求助" onclick="requestHelp" />
+      <text class="hint">无操作时自动发送或进入离线队列</text>
+
+      <div class="evidence-card">
+        <div class="evidence-head">
+          <text class="evidence-title">端侧判断依据</text>
+          <text class="confidence">{{ confidence }}%</text>
+        </div>
+        <div class="reason" for="{{ reasons }}">
+          <div class="reason-dot"></div>
+          <text class="reason-text">{{ $item }}</text>
+        </div>
+        <div class="evidence-footer">
+          <text class="evidence-small">峰值 {{ peakG }}g</text>
+          <text class="evidence-small">{{ locationLabel }}</text>
+        </div>
+      </div>
+
+      <div class="message-card">
+        <div class="message-head">
+          <text class="message-title">求助消息预览</text>
+          <text class="message-badge">结构化</text>
+        </div>
+        <text class="message-name">{{ messageTitle }}</text>
+        <text class="message-line">类型：{{ typeLabel }}</text>
+        <text class="message-line">时间：{{ messageTime }}</text>
+        <text class="message-line">位置：{{ locationLabel }}</text>
+        <text class="message-line">置信度：{{ confidence }}%</text>
+        <text class="message-line">佩戴者：{{ wearerStatus }}</text>
+        <text class="message-line">设备状态：{{ deviceStatus }}</text>
+        <text class="message-line">通知对象：{{ recipientSummary }}</text>
+      </div>
+
+    </div>
+  </scroll>
+</template>
+
+<script>
+import router from "@system.router"
+import vibrator from "@system.vibrator"
+import {buildEmergencyMessage, resolveAlert} from "../../common/event-machine.js"
+import {addEvent, loadContacts, loadSettings} from "../../common/storage.js"
+
+export default {
+  private: {
+    typeLabel: "安全确认",
+    confidence: 100,
+    reasons: [],
+    peakG: "--",
+    locationLabel: "位置待确认",
+    countdown: 10,
+    messageTitle: "VelaGuard安全提醒",
+    messageTime: "--",
+    wearerStatus: "佩戴者10秒内未响应",
+    deviceStatus: "检查网络状态中",
+    recipientSummary: "读取联系人中"
+  },
+
+  onInit() {
+    this.timer = null
+    this.handled = false
+  },
+
+  onShow() {
+    const alert = this.$app.$def.getCurrentAlert()
+    if (!alert) {
+      router.back()
+      return
+    }
+
+    this.alert = alert
+    this.typeLabel = alert.typeLabel
+    this.confidence = alert.confidence
+    this.reasons = alert.reasons
+    this.peakG = alert.peakG
+    this.locationLabel = alert.locationLabel
+    this.countdown = alert.type === "sos" ? 6 : 10
+    this.messageTime = alert.timeLabel
+    this.loadPreview()
+    this.startCountdown()
+    this.vibrate()
+  },
+
+  loadPreview() {
+    const page = this
+    loadSettings(function(settings) {
+      page.settings = settings
+      loadContacts(function(contacts) {
+        page.contacts = contacts
+        const message = buildEmergencyMessage(page.alert, "timeout", settings.demoOffline, contacts)
+        page.messageTitle = message.title
+        page.wearerStatus = message.wearerStatus
+        page.deviceStatus = message.deviceStatus
+        page.recipientSummary = message.recipients
+      })
+    })
+  },
+
+  onHide() {
+    this.stopCountdown()
+  },
+
+  onDestroy() {
+    this.stopCountdown()
+  },
+
+  vibrate() {
+    try {
+      vibrator.vibrate({
+        mode: "long"
+      })
+    } catch (error) {
+      console.log("vibrator unavailable", error)
+    }
+  },
+
+  startCountdown() {
+    const page = this
+    this.stopCountdown()
+    this.timer = setInterval(function() {
+      page.countdown -= 1
+      if (page.countdown <= 0) {
+        page.resolve("timeout")
+      }
+    }, 1000)
+  },
+
+  stopCountdown() {
+    if (this.timer) {
+      clearInterval(this.timer)
+      this.timer = null
+    }
+  },
+
+  confirmSafe() {
+    this.resolve("safe")
+  },
+
+  requestHelp() {
+    this.resolve("help")
+  },
+
+  resolve(action) {
+    const page = this
+    if (this.handled || !this.alert) {
+      return
+    }
+
+    this.handled = true
+    this.stopCountdown()
+    loadSettings(function(settings) {
+      loadContacts(function(contacts) {
+        const resolved = resolveAlert(page.alert, action, settings.demoOffline, contacts)
+        addEvent(resolved, function() {
+          page.$app.$def.clearCurrentAlert()
+          page.$app.$def.setCurrentEvent(resolved)
+          router.push({
+            uri: "/pages/event-detail"
+          })
+        })
+      })
+    })
+  }
+}
+</script>
+
+<style>
+.page {
+  width: 100%;
+  height: 100%;
+  background-color: #1a0c0b;
+}
+
+.content {
+  width: 100%;
+  min-height: 100%;
+  padding: 22px 28px 30px 28px;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.eyebrow {
+  color: #ff9b91;
+  font-size: 13px;
+  letter-spacing: 2px;
+  font-weight: bold;
+}
+
+.title {
+  color: #ffffff;
+  font-size: 30px;
+  font-weight: bold;
+  margin-top: 3px;
+}
+
+.subtitle {
+  color: #d4b5b1;
+  font-size: 13px;
+  margin-top: 1px;
+}
+
+.countdown-ring {
+  width: 108px;
+  height: 108px;
+  margin-top: 12px;
+  border: 6px solid #ff665a;
+  border-radius: 54px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.countdown {
+  color: #ffffff;
+  font-size: 42px;
+  font-weight: bold;
+}
+
+.countdown-unit {
+  color: #e8aaa4;
+  font-size: 12px;
+}
+
+.evidence-card {
+  width: 100%;
+  padding: 16px;
+  margin-top: 16px;
+  border-radius: 20px;
+  background-color: #2b1715;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.evidence-head {
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.evidence-title {
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: bold;
+}
+
+.confidence {
+  color: #ffb44a;
+  font-size: 19px;
+  font-weight: bold;
+}
+
+.reason {
+  width: 100%;
+  align-items: center;
+  margin-top: 7px;
+}
+
+.reason-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background-color: #ff665a;
+  margin-right: 9px;
+}
+
+.reason-text {
+  color: #dec4c1;
+  font-size: 13px;
+}
+
+.evidence-footer {
+  width: 100%;
+  justify-content: space-between;
+  margin-top: 13px;
+  padding-top: 10px;
+  border-top: 1px solid #52302c;
+}
+
+.evidence-small {
+  color: #9d7d79;
+  font-size: 11px;
+}
+
+.message-card {
+  width: 100%;
+  padding: 16px;
+  margin-top: 14px;
+  border-radius: 20px;
+  background-color: #13241f;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.message-head {
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.message-title {
+  color: #75e8bd;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.message-badge {
+  padding: 4px 7px;
+  border-radius: 10px;
+  background-color: #1d3a32;
+  color: #8acbb5;
+  font-size: 10px;
+}
+
+.message-name {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.message-line {
+  color: #a9beb7;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.safe-button {
+  width: 100%;
+  height: 48px;
+  margin-top: 12px;
+  border-radius: 24px;
+  background-color: #66efbd;
+  color: #09221b;
+  font-size: 15px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.help-button {
+  width: 100%;
+  height: 48px;
+  margin-top: 8px;
+  border-radius: 24px;
+  background-color: #ff594d;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.hint {
+  width: 100%;
+  margin-top: 7px;
+  color: #876b68;
+  font-size: 9px;
+  text-align: center;
+  flex-shrink: 0;
+}
+</style>

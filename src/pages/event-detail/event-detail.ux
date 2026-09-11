@@ -1,0 +1,781 @@
+<template>
+  <scroll id="detailScroll" class="page" scroll-y="true">
+    <div class="content">
+      <div class="header">
+        <input class="back-button" type="button" value="‹" onclick="goBack" />
+        <div class="header-copy">
+          <text class="eyebrow">EVENT TRACE</text>
+          <text class="title">{{ typeLabel }}</text>
+        </div>
+        <text class="status-chip {{ statusClass }}">{{ statusLabel }}</text>
+      </div>
+
+      <div class="page-tabs">
+        <input
+          class="page-tab {{ overviewTabClass }}"
+          type="button"
+          value="事件概览"
+          onclick="showPage(0)"
+        />
+        <input
+          class="page-tab {{ messageTabClass }}"
+          type="button"
+          value="求助信息"
+          onclick="showPage(1)"
+        />
+        <input
+          class="page-tab {{ timelineTabClass }}"
+          type="button"
+          value="处理过程"
+          onclick="showPage(2)"
+        />
+      </div>
+
+      <div class="page-caption">
+        <text class="page-caption-title">{{ pageTitle }}</text>
+        <text class="page-caption-count">{{ pageIndicator }}</text>
+      </div>
+
+      <div class="page-panel" if="{{ currentPage === 0 }}">
+        <div class="summary-card">
+          <div class="summary-row">
+            <div>
+              <text class="summary-label">事件时间</text>
+              <text class="summary-value">{{ timeLabel }}</text>
+            </div>
+            <div class="right-summary">
+              <text class="summary-label">可信度</text>
+              <text class="confidence">{{ confidence }}%</text>
+            </div>
+          </div>
+          <text class="location">{{ locationLabel }}</text>
+          <text class="result">{{ resultLabel }}</text>
+        </div>
+
+        <div class="section">
+          <text class="section-title">判断依据</text>
+          <div class="reason-row" for="{{ reasons }}">
+            <div class="reason-dot"></div>
+            <text class="reason-text">{{ $item }}</text>
+          </div>
+          <div class="feature-row">
+            <text class="feature">峰值 {{ peakG }}g</text>
+            <text class="feature">来源 {{ source }}</text>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-panel" if="{{ currentPage === 1 }}">
+        <div class="section" if="{{ hasMessage }}">
+          <div class="section-head">
+            <text class="section-title">求助消息快照</text>
+            <text class="snapshot-badge">不可变记录</text>
+          </div>
+          <text class="message-title">{{ messageTitle }}</text>
+          <text class="message-line">类型：{{ messageType }}</text>
+          <text class="message-line">时间：{{ messageTime }}</text>
+          <text class="message-line">位置：{{ messageLocation }}</text>
+          <text class="message-line">置信度：{{ messageConfidence }}</text>
+          <text class="message-line">佩戴者：{{ wearerStatus }}</text>
+          <text class="message-line">设备状态：{{ deviceStatus }}</text>
+          <text class="message-line">通知对象：{{ recipientSummary }}</text>
+        </div>
+
+        <div class="section" if="{{ showNoMessage }}">
+          <text class="section-title">未生成求助消息</text>
+          <text class="message-line">佩戴者已在倒计时结束前确认安全，本次事件仅保留端侧判断与处理记录。</text>
+        </div>
+
+        <div class="section" if="{{ contacts.length > 0 }}">
+          <text class="section-title">本次通知顺序</text>
+          <div class="contact-row" for="{{ contacts }}" tid="id">
+            <div class="priority">
+              <text class="priority-text">P{{ $item.priority }}</text>
+            </div>
+            <div class="contact-copy">
+              <text class="contact-name">{{ $item.name }}</text>
+              <text class="contact-value">{{ $item.maskedContact }}</text>
+            </div>
+            <text class="delivery">{{ deliveryText }}</text>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-panel" if="{{ currentPage === 2 }}">
+        <div class="section">
+          <text class="section-title">事件时间线</text>
+          <div class="timeline-row" for="{{ timeline }}" tid="id">
+            <div class="timeline-rail">
+              <div class="timeline-dot"></div>
+              <div class="timeline-line"></div>
+            </div>
+            <div class="timeline-copy">
+              <text class="timeline-time">{{ $item.timeLabel }}</text>
+              <text class="timeline-title">{{ $item.title }}</text>
+              <text class="timeline-detail">{{ $item.detail }}</text>
+            </div>
+          </div>
+          <text class="timeline-empty" if="{{ timelineEmpty }}">暂无分步时间线，事件基础信息仍已保留。</text>
+        </div>
+
+        <div class="withdrawal-card" if="{{ hasWithdrawal }}">
+          <text class="withdrawal-title">安全状态更新</text>
+          <text class="withdrawal-text">{{ withdrawalMessage }}</text>
+        </div>
+
+        <input
+          class="withdraw-button"
+          if="{{ canWithdraw }}"
+          type="button"
+          value="我已安全，发送撤回更新"
+          onclick="withdraw"
+        />
+        <text class="withdraw-note" if="{{ canWithdraw }}">
+          原始求助和发送记录会保留，仅追加“用户已安全”更新。
+        </text>
+      </div>
+
+      <div class="page-controls">
+        <div class="page-button-placeholder" if="{{ currentPage === 0 }}"></div>
+        <input
+          class="page-button"
+          if="{{ currentPage > 0 }}"
+          type="button"
+          value="‹ 上一页"
+          onclick="previousPage"
+        />
+        <text class="page-control-count">{{ pageIndicator }}</text>
+        <div class="page-button-placeholder" if="{{ currentPage === 2 }}"></div>
+        <input
+          class="page-button next-button"
+          if="{{ currentPage < 2 }}"
+          type="button"
+          value="下一页 ›"
+          onclick="nextPage"
+        />
+      </div>
+    </div>
+  </scroll>
+</template>
+
+<script>
+import router from "@system.router"
+import {withdrawEvent} from "../../common/event-machine.js"
+import {loadSettings, updateEvent} from "../../common/storage.js"
+
+function pad(value) {
+  return value < 10 ? "0" + value : String(value)
+}
+
+function fullTimeLabel(event) {
+  if (!event.createdAt) {
+    return event.timeLabel
+  }
+  const date = new Date(event.createdAt)
+  return (
+    date.getFullYear() +
+    "-" +
+    pad(date.getMonth() + 1) +
+    "-" +
+    pad(date.getDate()) +
+    " " +
+    pad(date.getHours()) +
+    ":" +
+    pad(date.getMinutes()) +
+    ":" +
+    pad(date.getSeconds())
+  )
+}
+
+function statusClassFor(status) {
+  if (status === "queued" || status === "withdrawal_queued") {
+    return "status-queued"
+  }
+  if (status === "withdrawn") {
+    return "status-withdrawn"
+  }
+  if (status === "cancelled") {
+    return "status-cancelled"
+  }
+  return "status-sent"
+}
+
+export default {
+  private: {
+    currentPage: 0,
+    pageTitle: "事件概览",
+    pageIndicator: "1 / 3",
+    overviewTabClass: "page-tab-active",
+    messageTabClass: "",
+    timelineTabClass: "",
+    typeLabel: "事件详情",
+    statusLabel: "--",
+    statusClass: "status-sent",
+    timeLabel: "--",
+    confidence: 0,
+    locationLabel: "--",
+    resultLabel: "--",
+    reasons: [],
+    peakG: "--",
+    source: "--",
+    timeline: [],
+    contacts: [],
+    hasMessage: false,
+    showNoMessage: true,
+    timelineEmpty: true,
+    messageTitle: "",
+    messageType: "",
+    messageTime: "",
+    messageLocation: "",
+    messageConfidence: "",
+    wearerStatus: "",
+    deviceStatus: "",
+    recipientSummary: "",
+    deliveryText: "",
+    canWithdraw: false,
+    hasWithdrawal: false,
+    withdrawalMessage: ""
+  },
+
+  onShow() {
+    const event = this.$app.$def.getCurrentEvent()
+    if (!event) {
+      router.back()
+      return
+    }
+    this.showPage(0)
+    this.renderEvent(event)
+  },
+
+  renderEvent(event) {
+    this.event = event
+    this.typeLabel = event.typeLabel
+    this.statusLabel = event.statusLabel
+    this.statusClass = statusClassFor(event.status)
+    this.timeLabel = fullTimeLabel(event)
+    this.confidence = event.confidence
+    this.locationLabel = event.locationLabel
+    this.resultLabel = event.resultLabel
+    this.reasons = event.reasons || []
+    this.peakG = event.peakG
+    this.source = event.source
+    this.timeline = event.timeline || []
+    this.timelineEmpty = this.timeline.length === 0
+    this.contacts = event.contacts || []
+    this.hasMessage = Boolean(event.message)
+    this.showNoMessage = !this.hasMessage
+    this.deliveryText =
+      event.status === "queued" ? "待发送" : event.status === "cancelled" ? "未发送" : "已通知"
+    this.canWithdraw = event.status === "sent"
+    this.hasWithdrawal = Boolean(event.withdrawalMessage)
+    this.withdrawalMessage = event.withdrawalMessage || ""
+
+    if (event.message) {
+      this.messageTitle = event.message.title
+      this.messageType = event.message.type
+      this.messageTime = event.message.time
+      this.messageLocation = event.message.location
+      this.messageConfidence = event.message.confidence
+      this.wearerStatus = event.message.wearerStatus
+      this.deviceStatus = event.message.deviceStatus
+      this.recipientSummary = event.message.recipients
+    }
+  },
+
+  showPage(pageIndex) {
+    this.currentPage = pageIndex
+    this.overviewTabClass = pageIndex === 0 ? "page-tab-active" : ""
+    this.messageTabClass = pageIndex === 1 ? "page-tab-active" : ""
+    this.timelineTabClass = pageIndex === 2 ? "page-tab-active" : ""
+
+    if (pageIndex === 0) {
+      this.pageTitle = "事件概览"
+    } else if (pageIndex === 1) {
+      this.pageTitle = "求助信息"
+    } else {
+      this.pageTitle = "处理过程"
+    }
+    this.pageIndicator = pageIndex + 1 + " / 3"
+    this.scrollToTop()
+  },
+
+  previousPage() {
+    if (this.currentPage > 0) {
+      this.showPage(this.currentPage - 1)
+    }
+  },
+
+  nextPage() {
+    if (this.currentPage < 2) {
+      this.showPage(this.currentPage + 1)
+    }
+  },
+
+  scrollToTop() {
+    const page = this
+    setTimeout(function() {
+      try {
+        const detailScroll = page.$element("detailScroll")
+        if (detailScroll) {
+          detailScroll.scrollTo({
+            top: 0,
+            left: 0,
+            behavior: "instant"
+          })
+        }
+      } catch (error) {
+        console.log("detail scroll reset skipped", error)
+      }
+    }, 0)
+  },
+
+  withdraw() {
+    const page = this
+    if (!this.event || !this.canWithdraw) {
+      return
+    }
+
+    loadSettings(function(settings) {
+      const updated = withdrawEvent(page.event, settings.demoOffline)
+      updateEvent(updated, function() {
+        page.$app.$def.setCurrentEvent(updated)
+        page.renderEvent(updated)
+      })
+    })
+  },
+
+  goBack() {
+    router.back()
+  }
+}
+</script>
+
+<style>
+.page {
+  width: 100%;
+  height: 100%;
+  background-color: #08110f;
+}
+
+.content {
+  width: 100%;
+  padding: 26px 22px 36px 22px;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.header {
+  width: 100%;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.back-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  background-color: #162521;
+  color: #ffffff;
+  font-size: 30px;
+}
+
+.header-copy {
+  flex: 1;
+  margin-left: 12px;
+  flex-direction: column;
+}
+
+.eyebrow {
+  color: #62ddb3;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+.title {
+  width: 100%;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.status-chip {
+  padding: 5px 9px;
+  border-radius: 13px;
+  font-size: 11px;
+}
+
+.status-sent {
+  color: #82d1ff;
+  background-color: #17354a;
+}
+
+.status-queued {
+  color: #ffd27b;
+  background-color: #41311c;
+}
+
+.status-withdrawn {
+  color: #dfc6ff;
+  background-color: #382d4a;
+}
+
+.status-cancelled {
+  color: #76eabd;
+  background-color: #17392f;
+}
+
+.page-tabs {
+  width: 100%;
+  height: 40px;
+  margin-top: 15px;
+  padding: 3px;
+  border-radius: 20px;
+  background-color: #101e1b;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.page-tab {
+  width: 32%;
+  height: 34px;
+  border-radius: 17px;
+  background-color: #101e1b;
+  color: #789089;
+  font-size: 11px;
+}
+
+.page-tab-active {
+  background-color: #245044;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.page-caption {
+  width: 100%;
+  margin-top: 14px;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.page-caption-title {
+  color: #ffffff;
+  font-size: 19px;
+  font-weight: bold;
+}
+
+.page-caption-count {
+  color: #6f8981;
+  font-size: 11px;
+}
+
+.page-panel {
+  width: 100%;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.summary-card {
+  width: 100%;
+  padding: 17px;
+  margin-top: 10px;
+  border-radius: 22px;
+  background-color: #10342a;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.summary-row {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.right-summary {
+  align-items: flex-end;
+  flex-direction: column;
+}
+
+.summary-label {
+  color: #79978e;
+  font-size: 11px;
+}
+
+.summary-value {
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: bold;
+}
+
+.confidence {
+  color: #70f1bf;
+  font-size: 23px;
+  font-weight: bold;
+}
+
+.location {
+  color: #b5ccc5;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.result {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: bold;
+  margin-top: 3px;
+}
+
+.section {
+  width: 100%;
+  padding: 16px;
+  margin-top: 13px;
+  border-radius: 20px;
+  background-color: #111f1c;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.section-head {
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.section-title {
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.snapshot-badge {
+  padding: 4px 7px;
+  border-radius: 10px;
+  color: #9eb4ad;
+  background-color: #25332f;
+  font-size: 9px;
+}
+
+.reason-row {
+  width: 100%;
+  align-items: center;
+  margin-top: 7px;
+}
+
+.reason-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background-color: #63e8b8;
+  margin-right: 9px;
+}
+
+.reason-text {
+  color: #b8cbc5;
+  font-size: 12px;
+}
+
+.feature-row {
+  width: 100%;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 9px;
+  border-top: 1px solid #263530;
+}
+
+.feature {
+  color: #6f837d;
+  font-size: 10px;
+}
+
+.message-title {
+  color: #70e6ba;
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.message-line {
+  color: #acbeb9;
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.contact-row {
+  width: 100%;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #263530;
+}
+
+.priority {
+  width: 34px;
+  height: 34px;
+  border-radius: 17px;
+  justify-content: center;
+  align-items: center;
+  background-color: #284a40;
+}
+
+.priority-text {
+  color: #77e9bd;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.contact-copy {
+  flex: 1;
+  margin-left: 10px;
+  flex-direction: column;
+}
+
+.contact-name {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.contact-value {
+  color: #70847e;
+  font-size: 10px;
+}
+
+.delivery {
+  color: #88cfff;
+  font-size: 10px;
+}
+
+.timeline-row {
+  width: 100%;
+  min-height: 66px;
+}
+
+.timeline-rail {
+  width: 20px;
+  flex-direction: column;
+  align-items: center;
+}
+
+.timeline-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 5px;
+  background-color: #64e9b8;
+  margin-top: 4px;
+}
+
+.timeline-line {
+  width: 2px;
+  height: 50px;
+  background-color: #284139;
+}
+
+.timeline-copy {
+  flex: 1;
+  padding-left: 8px;
+  flex-direction: column;
+}
+
+.timeline-time {
+  color: #638078;
+  font-size: 9px;
+}
+
+.timeline-title {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.timeline-detail {
+  width: 100%;
+  color: #8fa39d;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.timeline-empty {
+  width: 100%;
+  color: #71857f;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.withdrawal-card {
+  width: 100%;
+  padding: 16px;
+  margin-top: 13px;
+  border-radius: 20px;
+  background-color: #30263e;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.withdrawal-title {
+  color: #d9baff;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.withdrawal-text {
+  color: #bcabcd;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.withdraw-button {
+  width: 100%;
+  height: 52px;
+  margin-top: 16px;
+  border-radius: 26px;
+  background-color: #7c55a2;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.withdraw-note {
+  width: 100%;
+  color: #776b80;
+  font-size: 10px;
+  text-align: center;
+  margin-top: 7px;
+  flex-shrink: 0;
+}
+
+.page-controls {
+  width: 100%;
+  height: 46px;
+  margin-top: 16px;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.page-button,
+.page-button-placeholder {
+  width: 32%;
+  height: 42px;
+}
+
+.page-button {
+  border-radius: 21px;
+  background-color: #1d332e;
+  color: #bcd5ce;
+  font-size: 12px;
+}
+
+.next-button {
+  background-color: #24604f;
+  color: #ffffff;
+}
+
+.page-control-count {
+  width: 28%;
+  color: #70877f;
+  font-size: 11px;
+  text-align: center;
+}
+</style>

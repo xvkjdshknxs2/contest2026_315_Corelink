@@ -1,0 +1,52 @@
+{
+  "package": "com.openvela.contest.velaguard",
+  "name": "VelaGuard",
+  "versionName": "1.0.0",
+  "versionCode": 1,
+  "minPlatformVersion": 1000,
+  "icon": "/common/logo.png",
+  "deviceTypeList": [
+    "watch"
+  ],
+  "features": [
+    {
+      "name": "system.router"
+    },
+    {
+      "name": "system.storage"
+    },
+    {
+      "name": "system.network"
+    },
+    {
+      "name": "system.vibrator"
+    },
+    {
+      "name": "system.sensor"
+    },
+    {
+      "name": "system.fetch"
+    }
+  ],
+  "config": {
+    "logLevel": "log",
+    "designWidth": "device-width"
+  },
+  "router": {
+    "entry": "pages/cover",
+    "pages": {
+      "pages/cover": {
+        "component": "cover"
+      },
+      "pages/swiper-container": {
+        "component": "swiper-container"
+      },
+      "pages/alert": {
+        "component": "alert"
+      },
+      "pages/event-detail": {
+        "component": "event-detail"
+      }
+    }
+  }
+}

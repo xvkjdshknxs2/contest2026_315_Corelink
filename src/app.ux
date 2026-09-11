@@ -1,0 +1,40 @@
+<script>
+export default {
+  data: {
+    currentAlert: null,
+    currentEvent: null
+  },
+
+  onCreate() {
+    console.log("VelaGuard application created")
+  },
+
+  onDestroy() {
+    console.log("VelaGuard application destroyed")
+  },
+
+  setCurrentAlert(alert) {
+    this.data.currentAlert = alert
+  },
+
+  getCurrentAlert() {
+    return this.data.currentAlert
+  },
+
+  clearCurrentAlert() {
+    this.data.currentAlert = null
+  },
+
+  setCurrentEvent(event) {
+    this.data.currentEvent = event
+  },
+
+  getCurrentEvent() {
+    return this.data.currentEvent
+  },
+
+  clearCurrentEvent() {
+    this.data.currentEvent = null
+  }
+}
+</script>

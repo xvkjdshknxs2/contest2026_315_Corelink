@@ -1,0 +1,31 @@
+{
+  "name": "velaguard-watch",
+  "version": "1.0.0",
+  "description": "VelaGuard 安行腕伴 - openvela 可穿戴安全应用",
+  "engines": {
+    "node": ">=8.10"
+  },
+  "scripts": {
+    "start": "aiot start --watch",
+    "build": "aiot build",
+    "release": "aiot release",
+    "model:train": "python model-training/train_and_export.py",
+    "lint": "eslint --format codeframe --fix --ext .ux,.js src/"
+  },
+  "lint-staged": {
+    "*.{ux,js}": [
+      "prettier --write",
+      "eslint --format codeframe --fix",
+      "git add"
+    ],
+    "*.{less,css}": [
+      "prettier --write",
+      "stylelint --fix --custom-syntax postcss-less",
+      "git add"
+    ]
+  },
+  "devDependencies": {
+    "@aiot-toolkit/jsc": "^1.0.3",
+    "aiot-toolkit": "^2.0.5"
+  }
+}
